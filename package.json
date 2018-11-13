@@ -1,0 +1,8 @@
+{
+  "name": "clare-bot",
+  "version": "1.0.0",
+  "dependencies": {
+    "@octokit/rest": "^15.17.0"
+  },
+  "devDependencies": {}
+}
