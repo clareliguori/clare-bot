@@ -1,0 +1,117 @@
+AWSTemplateFormatVersion: 2010-09-09
+Transform: 'AWS::Serverless-2016-10-31'
+
+Description: GitHub personal bot
+
+Parameters:
+  BotName:
+    Description: Name of the bot
+    Type: String
+    Default: clare-bot
+
+  RepositoryName:
+    Description: Name of the ECR repository
+    Type: String
+    Default: clare-bot
+
+  RepositoryTag:
+    Description: Image tag in the ECR repository
+    Type: String
+    Default: latest
+
+  GitHubTokenParameter:
+    Description: Parameter Store parameter where encrypted GitHub OAuth Token is stored
+    Type: AWS::SSM::Parameter::Name
+    Default: clare-bot-github-token
+
+Resources:
+  TaskDefinition:
+    Type: 'AWS::ECS::TaskDefinition'
+    Properties:
+      Family: !Ref BotName
+      ContainerDefinitions:
+        - Name: bot
+          Image:
+            'Fn::Join':
+              - ''
+              - - !Ref 'AWS::AccountId'
+                - .dkr.ecr.
+                - !Ref 'AWS::Region'
+                - .amazonaws.com/
+                - !Ref RepositoryName
+                - ':'
+                - !Ref ImageTag
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref Logs
+              awslogs-region: !Ref AWS::Region
+          Environment:
+            Name: githubTokenParameter
+            Value: !Ref GitHubTokenParameter
+      Cpu: '256'
+      Memory: '512'
+      NetworkMode: awsvpc
+      RequiresCompatibilities:
+        - FARGATE
+      ExecutionRoleArn:
+        'Fn::GetAtt':
+          - TaskExecutionRole
+          - Arn
+      TaskRoleArn:
+        'Fn::GetAtt':
+          - TaskRole
+          - Arn
+
+  BotSchedule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name:
+        Fn::Join:
+        - '-'
+        - - !Ref BotName
+          - Poll
+      ScheduleExpression: rate(5 minutes)
+      State: DISABLED
+      # No targets: CloudFormation doesn't support Fargate targets
+
+  Logs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Ref BotName
+      RetentionInDays: 365
+
+  TaskSecurityGroup:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: Bot security group, no ingress, all egress
+      SecurityGroupEgress:
+        - CidrIp: 0.0.0.0/0
+          Description: Allow all outbound traffic by default
+          IpProtocol: '-1'
+      SecurityGroupIngress: []
+      VpcId: !Ref Vpc
+
+  TaskRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Action: 'sts:AssumeRole'
+            Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+        Version: '2012-10-17'
+
+  TaskExecutionRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Action: 'sts:AssumeRole'
+            Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+        Version: '2012-10-17'
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy

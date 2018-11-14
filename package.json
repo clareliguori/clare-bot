@@ -2,7 +2,8 @@
   "name": "clare-bot",
   "version": "1.0.0",
   "dependencies": {
-    "@octokit/rest": "^15.17.0"
+    "@octokit/rest": "^15.17.0",
+    "aws-sdk": "^2.355.0"
   },
   "devDependencies": {}
 }

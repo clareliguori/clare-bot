@@ -32,7 +32,7 @@ docker tag clare-bot $ECR_REPO
 docker push $ECR_REPO
 ```
 
-Provision the stack in CloudFormation:
+Provision the stack in CloudFormation.  You will need a VPC with private subnets and a NAT Gateway for internet access already set up (a sample template for that can be found [here](https://s3.amazonaws.com/us-east-1-containersonaws.com/templates/cluster/cluster-fargate-private-vpc.yml)).
 ```
 aws cloudformation deploy --region us-west-2 --stack-name clare-bot --template-file template.yml --capabilities CAPABILITY_NAMED_IAM
 ```
