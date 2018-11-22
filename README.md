@@ -8,7 +8,9 @@ Built with GitHub APIs, AWS Fargate, and Amazon CloudWatch Events
 
 ### Set up the bot
 
-Create a GitHub user for your bot, like @clare-bot.  Create a [personal access token](https://github.com/settings/tokens) for the bot user with the following scopes:
+Create a GitHub user for your bot, like @clare-bot.  Update the user's [notification settings](https://github.com/settings/notifications) to select all "Web" notifications instead of "Email", and to "Automatically watch repositories".
+
+Create a [personal access token](https://github.com/settings/tokens) for the bot user with the following scopes:
 
 * `repo` (Full control of private repositories)
 * `notifications` (Access notifications)
