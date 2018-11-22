@@ -19,7 +19,12 @@ Store the token in AWS Systems Manager Parameter Store:
 
 ```aws ssm put-parameter --region us-west-2 --name clare-bot-github-token --type SecureString --value <personal access token>```
 
-Create an Amazon ECR repository, then build and push the Docker image:
+Provision the stack in CloudFormation:
+```
+aws cloudformation deploy --region us-west-2 --stack-name clare-bot --template-file template.yml --capabilities CAPABILITY_NAMED_IAM --parameter-overrides Vpc=<default VPC ID>
+```
+
+Build and push the Docker image:
 
 ```
 ECR_REPO=`aws ecr create-repository --region us-west-2 --repository-name clare-bot --output text --query 'repository.repositoryUri'`
@@ -32,11 +37,6 @@ docker build -t clare-bot .
 docker tag clare-bot $ECR_REPO
 
 docker push $ECR_REPO
-```
-
-Provision the stack in CloudFormation.  You will need a VPC with private subnets and a NAT Gateway for internet access already set up (a sample template for that can be found [here](https://s3.amazonaws.com/us-east-1-containersonaws.com/templates/cluster/cluster-fargate-private-vpc.yml)).
-```
-aws cloudformation deploy --region us-west-2 --stack-name clare-bot --template-file template.yml --capabilities CAPABILITY_NAMED_IAM --parameter-overrides Vpc=vpc-1234
 ```
 
 ### Test Locally

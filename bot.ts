@@ -10,6 +10,7 @@
  * - paginate notifications (max 100)
  * - success/failure metrics to CloudWatch
  * - handle new changes being pushed to the PR (should update any existing preview environment)
+ * - use a config file in the repo to get the right buildspec filename
  */
 
 const CronJob = require('cron').CronJob;
@@ -17,30 +18,72 @@ import AWS = require('aws-sdk');
 import octokitlib = require('@octokit/rest');
 const octokit = new octokitlib();
 
+const ssm = new AWS.SSM();
+const codebuild = new AWS.CodeBuild();
+
 const githubTokenParameter = process.env.githubTokenParameter || 'clare-bot-github-token';
 let githubToken: string;
 
 const botUser = process.env.botUser || 'clare-bot';
 
+const region = process.env.AWS_REGION;
+
 const whitelistedUsers = process.env.whitelistedUsers ? process.env.whitelistedUsers.split(',') : ['clareliguori'];
+
+const buildProject = process.env.buildProject || 'clare-bot';
+
+const ecrRepository = process.env.ecrRepository || 'clare-bot-preview-images';
 
 /**
  * Stand up a preview environment, including building and pushing the Docker image
  */
 async function provisionPreviewStack(owner: string, repo: string, prNumber: number, requester: string) {
-  octokit.issues.createComment({
+  await octokit.issues.createComment({
     owner,
     repo,
     number: prNumber,
     body: "Ok @" + requester + ", I am provisioning a preview stack"
   });
+
+  // start a build to build and push the Docker image, plus synthesize the CloudFormation template
+  const startBuildResponse = await codebuild.startBuild({
+    projectName: buildProject,
+    sourceVersion: 'pr/' + prNumber,
+    sourceLocationOverride: `https://github.com/${owner}/${repo}`,
+    buildspecOverride: 'buildspec-preview.yml',
+    environmentVariablesOverride: [
+      {
+        name: "IMAGE_REPO",
+        value: ecrRepository
+      },
+      {
+        name: "IMAGE_TAG",
+        value: `${owner}-${repo}-pr-${prNumber}`
+      }
+    ]
+  }).promise();
+  const buildId = startBuildResponse.build.id;
+  const buildUrl = `https://console.aws.amazon.com/codesuite/codebuild/projects/${buildProject}/build/${buildId}/log?region=${region}`;
+
+  await octokit.issues.createComment({
+    owner,
+    repo,
+    number: prNumber,
+    body: `I started build [${buildId}](${buildUrl}) for the preview stack`
+  });
+
+  // wait for build completion
+
+  // get the template from the build artifact
+
+  // create or update CloudFormation stack
 }
 
 /**
  * Tear down when the pull request is closed
  */
 async function cleanupPreviewStack(owner: string, repo: string, prNumber: number) {
-  octokit.issues.createComment({
+  await octokit.issues.createComment({
     owner,
     repo,
     number: prNumber,
@@ -53,9 +96,10 @@ async function cleanupPreviewStack(owner: string, repo: string, prNumber: number
  */
 async function handleNotification(notification: octokitlib.ActivityGetNotificationsResponseItem) {
   // Mark the notification as read
-  await octokit.activity.markNotificationThreadAsRead({
+  /*await octokit.activity.markNotificationThreadAsRead({
     thread_id: parseInt(notification.id, 10)
   });
+  */
 
   // Validate the notification
   if (notification.reason != 'mention') {
@@ -138,7 +182,6 @@ async function retrieveNotifications() {
   try {
     // Retrieve the plaintext github token
     if (!githubToken) {
-      const ssm = new AWS.SSM();
       const params = {
         Name: githubTokenParameter,
         WithDecryption: true

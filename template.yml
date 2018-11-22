@@ -4,35 +4,25 @@ Transform: 'AWS::Serverless-2016-10-31'
 Description: GitHub personal bot
 
 Parameters:
-  BotName:
-    Description: Name of the bot
-    Type: String
-    Default: clare-bot
-
-  RepositoryName:
-    Description: Name of the ECR repository
-    Type: String
-    Default: clare-bot
-
-  ImageTag:
-    Description: Image tag in the ECR repository
-    Type: String
-    Default: latest
-
   GitHubTokenParameter:
     Description: Parameter Store parameter where encrypted GitHub OAuth Token is stored
     Type: AWS::SSM::Parameter::Name
     Default: clare-bot-github-token
 
   Vpc:
-    Description: Vpc for the security group
+    Description: ID of the default VPC (or other VPC with public subnets)
     Type: AWS::EC2::VPC::Id
 
 Resources:
+  BotImageRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: !Ref 'AWS::StackName'
+
   TaskDefinition:
     Type: 'AWS::ECS::TaskDefinition'
     Properties:
-      Family: !Ref BotName
+      Family: !Ref 'AWS::StackName'
       ContainerDefinitions:
         - Name: bot
           Image:
@@ -42,9 +32,8 @@ Resources:
                 - .dkr.ecr.
                 - !Ref 'AWS::Region'
                 - .amazonaws.com/
-                - !Ref RepositoryName
-                - ':'
-                - !Ref ImageTag
+                - !Ref 'AWS::StackName'
+                - ':latest'
           LogConfiguration:
             LogDriver: awslogs
             Options:
@@ -68,22 +57,10 @@ Resources:
           - TaskRole
           - Arn
 
-  BotSchedule:
-    Type: AWS::Events::Rule
-    Properties:
-      Name:
-        Fn::Join:
-        - '-'
-        - - !Ref BotName
-          - poll
-      ScheduleExpression: rate(5 minutes)
-      State: DISABLED
-      # No targets: CloudFormation doesn't support Fargate targets
-
   Logs:
     Type: AWS::Logs::LogGroup
     Properties:
-      LogGroupName: !Ref BotName
+      LogGroupName: !Ref 'AWS::StackName'
       RetentionInDays: 365
 
   TaskSecurityGroup:
@@ -144,7 +121,144 @@ Resources:
       PolicyName:
         Fn::Join:
         - '-'
-        - - !Ref BotName
+        - - !Ref 'AWS::StackName'
           - task-role
       Roles:
         - Ref: TaskRole
+
+  PreviewStackImageRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: !Join
+        - ''
+        - - !Ref 'AWS::StackName'
+          - "-preview-images"
+      LifecyclePolicy:
+        LifecyclePolicyText: |
+          {
+              "rules": [
+                  {
+                      "rulePriority": 1,
+                      "description": "Expire images older than 14 days",
+                      "selection": {
+                          "tagStatus": "any",
+                          "countType": "sinceImagePushed",
+                          "countUnit": "days",
+                          "countNumber": 14
+                      },
+                      "action": {
+                          "type": "expire"
+                      }
+                  }
+              ]
+          }
+
+  PreviewStackBuildProject:
+    DependsOn:
+    - PreviewStackBuildPolicy
+    Properties:
+      Artifacts:
+        Location: !Ref 'ArtifactsBucket'
+        Name: 'build-output.zip'
+        NamespaceType: BUILD_ID
+        Packaging: ZIP
+        Path: 'codebuild'
+        Type: S3
+      Description: !Join
+        - ''
+        - - 'CodeBuild Project for '
+          - !Ref 'AWS::StackName'
+      Environment:
+        ComputeType: BUILD_GENERAL1_SMALL
+        Image: aws/codebuild/nodejs:10.1.0
+        PrivilegedMode: true
+        Type: LINUX_CONTAINER
+      Name: !Ref 'AWS::StackName'
+      ServiceRole: !Ref 'PreviewStackBuildRole'
+      Source:
+        Type: GITHUB
+        Location: "https://github.com/clareliguori/clare-bot.git"
+        Auth:
+          Type: OAUTH
+    Type: AWS::CodeBuild::Project
+
+  PreviewStackBuildRole:
+    Description: Creating service role in IAM for Amazon EC2 instances
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+        - Action: sts:AssumeRole
+          Effect: Allow
+          Principal:
+            Service: codebuild.amazonaws.com
+      Path: /
+      RoleName: !Join
+        - '-'
+        - - !Ref 'AWS::StackName'
+          - CodeBuild
+    Type: AWS::IAM::Role
+
+  PreviewStackBuildPolicy:
+    Description: Setting IAM policy for service role for CodeBuild
+    Properties:
+      PolicyDocument:
+        Statement:
+        - Action:
+          - logs:CreateLogGroup
+          - logs:CreateLogStream
+          - logs:PutLogEvents
+          Effect: Allow
+          Resource: '*'
+        - Action:
+          - s3:PutObject
+          - s3:GetObject
+          - s3:GetObjectVersion
+          Effect: Allow
+          Resource:
+          - !Join
+            - ''
+            - - 'arn:aws:s3:::'
+              - !Ref 'ArtifactsBucket'
+          - !Join
+            - ''
+            - - 'arn:aws:s3:::'
+              - !Ref 'ArtifactsBucket'
+              - /*
+        - Action:
+          - kms:GenerateDataKey*
+          - kms:Encrypt
+          - kms:Decrypt
+          Effect: Allow
+          Resource:
+          - !Join
+            - ':'
+            - - arn:aws:kms
+              - !Ref 'AWS::Region'
+              - !Ref 'AWS::AccountId'
+              - !Join
+                - /
+                - - alias
+                  - aws/s3
+      PolicyName: !Join
+        - '-'
+        -  - !Ref 'AWS::StackName'
+           - PreviewStackBuildPolicy
+      Roles:
+      - !Ref 'PreviewStackBuildRole'
+    Type: AWS::IAM::Policy
+
+  ArtifactsBucket:
+    DeletionPolicy: Delete
+    Description: Amazon S3 bucket for CodeBuild artifacts
+    Properties:
+      Tags:
+      - Key: Name
+        Value: !Join
+        - '-'
+        - - !Ref 'AWS::StackName'
+          - ArtifactsBucket
+      LifecycleConfiguration:
+        Rules:
+          - ExpirationInDays : 14
+            Status: Enabled
+    Type: AWS::S3::Bucket
