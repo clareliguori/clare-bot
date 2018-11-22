@@ -12,6 +12,7 @@
  * - handle new changes being pushed to the PR (should update any existing preview environment)
  */
 
+const CronJob = require('cron').CronJob;
 import AWS = require('aws-sdk');
 import octokitlib = require('@octokit/rest');
 const octokit = new octokitlib();
@@ -132,37 +133,57 @@ async function handleNotification(notification: octokitlib.ActivityGetNotificati
  * Retrieve notifications from GitHub and filter to those handled by this bot
  */
 async function retrieveNotifications() {
-  // Retrieve the plaintext github token
-  if (!githubToken) {
-    const ssm = new AWS.SSM();
-    const params = {
-      Name: githubTokenParameter,
-      WithDecryption: true
-    };
-    const paramResult = await ssm.getParameter(params).promise();
-    githubToken = paramResult.Parameter.Value;
-  }
-  octokit.authenticate({ type: 'token', token: githubToken });
+  console.log("Retrieving notifications: " + (new Date()).toISOString());
 
-  // Retrieve latest unread notifications
-  const since = new Date();
-  since.setHours(since.getHours() - 1); // last hour
-  const response = await octokit.activity.getNotifications({
-    all: false, // unread only
-    since: since.toISOString(),
-    participating: true, // only get @mentions
-  });
-  const notifications = response.data;
+  try {
+    // Retrieve the plaintext github token
+    if (!githubToken) {
+      const ssm = new AWS.SSM();
+      const params = {
+        Name: githubTokenParameter,
+        WithDecryption: true
+      };
+      const paramResult = await ssm.getParameter(params).promise();
+      githubToken = paramResult.Parameter.Value;
+    }
+    octokit.authenticate({ type: 'token', token: githubToken });
 
-  console.log(response.headers);
-  console.log("Notifications: " + notifications.length);
-  for (const notification of notifications) {
-    console.log(notification);
-    handleNotification(notification);
+    // Retrieve latest unread notifications
+    const since = new Date();
+    since.setHours(since.getHours() - 1); // last hour
+    const response = await octokit.activity.getNotifications({
+      all: false, // unread only
+      since: since.toISOString(),
+      participating: true, // only get @mentions
+    });
+    const notifications = response.data;
+
+    console.log(response.headers);
+    console.log("Notifications: " + notifications.length);
+    for (const notification of notifications) {
+      console.log(notification);
+      handleNotification(notification);
+    }
+  } catch(err) {
+    console.error(err);
   }
 }
 
-retrieveNotifications().catch(err => {
-  console.error('There was an uncaught error', err);
-  process.exit(1);
+// start every 30 seconds
+console.log("Scheduling jobs");
+const job = new CronJob('*/30 * * * * *', retrieveNotifications);
+
+process.on('SIGTERM', () => {
+  console.info('SIGTERM signal received.');
+  job.stop();
 });
+process.on('SIGHUP', () => {
+  console.info('SIGHUP signal received.');
+  job.stop();
+});
+process.on('SIGINT', () => {
+  console.info('SIGINT signal received.');
+  job.stop();
+});
+
+job.start();
