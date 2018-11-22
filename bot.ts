@@ -5,10 +5,11 @@
  * and acts on commands.
  *
  * TODO:
- * - lock notifications in DynamoDB so that multiple bot instances don't act on the same command
+ * - lock notifications so that multiple bot instances don't act on the same command
  * - Use last modified flag to get higher rate limit
  * - paginate notifications (max 100)
  * - success/failure metrics to CloudWatch
+ * - handle new changes being pushed to the PR (should update any existing preview environment)
  */
 
 import AWS = require('aws-sdk');
@@ -25,12 +26,12 @@ const whitelistedUsers = process.env.whitelistedUsers ? process.env.whitelistedU
 /**
  * Stand up a preview environment, including building and pushing the Docker image
  */
-async function provisionPreviewStack(owner: string, repo: string, prNumber: number) {
+async function provisionPreviewStack(owner: string, repo: string, prNumber: number, requester: string) {
   octokit.issues.createComment({
     owner,
     repo,
     number: prNumber,
-    body: "Provisioned preview stack"
+    body: "Ok @" + requester + ", I am provisioning a preview stack"
   });
 }
 
@@ -50,6 +51,11 @@ async function cleanupPreviewStack(owner: string, repo: string, prNumber: number
  * Determine the action associated with this notification
  */
 async function handleNotification(notification: octokitlib.ActivityGetNotificationsResponseItem) {
+  // Mark the notification as read
+  await octokit.activity.markNotificationThreadAsRead({
+    thread_id: parseInt(notification.id, 10)
+  });
+
   // Validate the notification
   if (notification.reason != 'mention') {
     console.log("Ignoring because reason is not mention: " + notification.reason);
@@ -85,7 +91,6 @@ async function handleNotification(notification: octokitlib.ActivityGetNotificati
     const commentUrl = notification.subject.latest_comment_url;
 
     if (commentUrl == pullRequestsUrl) {
-      // TODO handle new changes being pushed to the PR (should update any existing preview environment)
       console.log("Ignoring because there were no new comments");
       return;
     }
@@ -111,10 +116,11 @@ async function handleNotification(notification: octokitlib.ActivityGetNotificati
       return;
     }
 
+    const requester = commentResponse.data.user.login;
     const command = commentBody.replace('@' + botUser, '').trim();
     if (command == 'preview this') {
       console.log("Provisioning preview stack");
-      await provisionPreviewStack(owner, repo, prNumber);
+      await provisionPreviewStack(owner, repo, prNumber, requester);
     } else {
       console.log("Ignoring because command is not understood: " + command);
       return;
@@ -140,7 +146,7 @@ async function retrieveNotifications() {
 
   // Retrieve latest unread notifications
   const since = new Date();
-  since.setHours(since.getHours() - 1);
+  since.setHours(since.getHours() - 1); // last hour
   const response = await octokit.activity.getNotifications({
     all: false, // unread only
     since: since.toISOString(),
@@ -149,9 +155,9 @@ async function retrieveNotifications() {
   const notifications = response.data;
 
   console.log(response.headers);
+  console.log("Notifications: " + notifications.length);
   for (const notification of notifications) {
     console.log(notification);
-
     handleNotification(notification);
   }
 }
