@@ -10,7 +10,6 @@
   },
   "dependencies": {
     "@octokit/rest": "^15.17.0",
-    "async-wait-until": "^1.2.4",
     "aws-sdk": "^2.355.0",
     "cron": "^1.5.0"
   }

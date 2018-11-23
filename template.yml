@@ -159,17 +159,15 @@ Resources:
     Properties:
       Artifacts:
         Location: !Ref 'ArtifactsBucket'
-        Name: 'build-output.zip'
         NamespaceType: BUILD_ID
         Packaging: NONE
-        Path: 'codebuild'
         Type: S3
       Description: !Join
         - ''
         - - 'CodeBuild Project for '
           - !Ref 'AWS::StackName'
       Environment:
-        ComputeType: BUILD_GENERAL1_SMALL
+        ComputeType: BUILD_GENERAL1_LARGE
         Image: aws/codebuild/nodejs:10.1.0
         PrivilegedMode: true
         Type: LINUX_CONTAINER
@@ -196,6 +194,9 @@ Resources:
         - '-'
         - - !Ref 'AWS::StackName'
           - CodeBuild
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryPowerUser
+        - arn:aws:iam::aws:policy/AmazonEC2ReadOnlyAccess
     Type: AWS::IAM::Role
 
   PreviewStackBuildPolicy:

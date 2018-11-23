@@ -11,10 +11,10 @@
  * - success/failure metrics to CloudWatch
  * - handle new changes being pushed to the PR (should update any existing preview environment)
  * - use a config file in the repo to get the right buildspec filename
+ * - delete CloudFormation stacks that are in non-updatable states (ROLLBACK_COMPLETE)
  */
 
 const CronJob = require('cron').CronJob;
-const waitUntil = require('async-wait-until');
 import AWS = require('aws-sdk');
 import octokitlib = require('@octokit/rest');
 const octokit = new octokitlib();
@@ -35,6 +35,10 @@ const whitelistedUsers = process.env.whitelistedUsers ? process.env.whitelistedU
 const buildProject = process.env.buildProject || 'clare-bot';
 
 const ecrRepository = process.env.ecrRepository || 'clare-bot-preview-images';
+
+function timeout(sec: number) {
+  return new Promise(resolve => setTimeout(resolve, sec*1000));
+}
 
 /**
  * Stand up a preview environment, including building and pushing the Docker image
@@ -76,19 +80,25 @@ async function provisionPreviewStack(owner: string, repo: string, prNumber: numb
   });
 
   // wait for build completion
-  await waitUntil(async () => {
+  for(let i = 0; i < 150; i++) {
     const response = await codebuild.batchGetBuilds({
       ids: [buildId]
     }).promise();
-    return response.builds[0].buildComplete;
-  }, 1000*60*10, 1000*5); // 10 minutes timeout, poll every 5 seconds
+
+    if (response.builds[0].buildComplete) {
+      break;
+    }
+
+    await timeout(5);
+  }
 
   const buildResponse = await codebuild.batchGetBuilds({
     ids: [buildId]
   }).promise();
   const buildResult = buildResponse.builds[0];
 
-  if (buildResult != 'SUCCEEDED') {
+  if (buildResult.buildStatus != 'SUCCEEDED') {
+    console.error("Build status: " + buildResult.buildStatus);
     await octokit.issues.createComment({
       owner,
       repo,
@@ -96,14 +106,14 @@ async function provisionPreviewStack(owner: string, repo: string, prNumber: numb
       body: `Build [${buildId}](${buildUrl}) failed`
     });
     return;
-  } else {
-    await octokit.issues.createComment({
-      owner,
-      repo,
-      number: prNumber,
-      body: `Build [${buildId}](${buildUrl}) succeeded. Now provisioning the preview stack ${uniqueId}`
-    });
   }
+
+  await octokit.issues.createComment({
+    owner,
+    repo,
+    number: prNumber,
+    body: `Build [${buildId}](${buildUrl}) succeeded. Now provisioning the preview stack ${uniqueId}`
+  });
 
   // get the template from the build artifact
   const s3Location = buildResult.artifacts.location + "/template.yml";
@@ -124,36 +134,33 @@ async function provisionPreviewStack(owner: string, repo: string, prNumber: numb
   }
 
   if (stackExists) {
-    await cloudformation.updateStack({
-      StackName: uniqueId,
-      TemplateURL: s3Url,
-      Capabilities: ["CAPABILITY_IAM"]
-    }).promise();
+    try {
+      await cloudformation.updateStack({
+        StackName: uniqueId,
+        TemplateURL: s3Url,
+        Capabilities: ["CAPABILITY_IAM"]
+      }).promise();
+      cloudformation.waitFor("stackUpdateComplete", { StackName: uniqueId });
+    } catch(err) {
+      if (!err.message.endsWith('No updates are to be performed.')) {
+        throw err;
+      }
+    }
   } else {
     await cloudformation.createStack({
       StackName: uniqueId,
       TemplateURL: s3Url,
       Capabilities: ["CAPABILITY_IAM"]
     }).promise();
+    cloudformation.waitFor("stackCreateComplete", { StackName: uniqueId });
   }
-
-  await waitUntil(async () => {
-    const response = await cloudformation.describeStacks({
-      StackName: uniqueId
-    }).promise();
-    const completedStatusCodes = [
-      "CREATE_FAILED","CREATE_COMPLETE","ROLLBACK_FAILED","ROLLBACK_COMPLETE",
-      "UPDATE_COMPLETE","UPDATE_ROLLBACK_FAILED","UPDATE_ROLLBACK_COMPLETE"
-    ]
-    return completedStatusCodes.includes(response.Stacks[0].StackStatus);
-  }, 1000*60*10, 1000*5); // 10 minutes timeout, poll every 5 seconds
 
   const stackResponse = await cloudformation.describeStacks({
     StackName: uniqueId
   }).promise();
   const stackStatus = stackResponse.Stacks[0].StackStatus;
   const stackArn = stackResponse.Stacks[0].StackId;
-  const stackUrl = `https://console.aws.amazon.com/cloudformation/home?region=${region}#/stacks/${stackArn}/overview`;
+  const stackUrl = `https://console.aws.amazon.com/cloudformation/home?region=${region}#/stacks/${encodeURI(stackArn)}/overview`;
 
   if (stackStatus != "CREATE_COMPLETE" && stackStatus != "UPDATE_COMPLETE") {
     await octokit.issues.createComment({
@@ -165,7 +172,8 @@ async function provisionPreviewStack(owner: string, repo: string, prNumber: numb
   } else {
     let body = `@${requester} preview stack creation [${uniqueId}](${stackUrl}) succeeded!`;
     for (const output of stackResponse.Stacks[0].Outputs) {
-      body += `\n${output.OutputKey}:${output.OutputValue}`;
+      const value = output.OutputValue.endsWith('elb.amazonaws.com') ? `http://${output.OutputValue}` : output.OutputValue;
+      body += `\n\n${output.OutputKey}: ${value}`;
     }
     await octokit.issues.createComment({
       owner,
@@ -180,12 +188,58 @@ async function provisionPreviewStack(owner: string, repo: string, prNumber: numb
  * Tear down when the pull request is closed
  */
 async function cleanupPreviewStack(owner: string, repo: string, prNumber: number) {
-  await octokit.issues.createComment({
-    owner,
-    repo,
-    number: prNumber,
-    body: "Cleaned up preview stack"
-  });
+  // Delete the stack
+  const uniqueId = `${owner}-${repo}-pr-${prNumber}`;
+  let stackExists = true;
+  try {
+    await cloudformation.describeStacks({
+      StackName: uniqueId
+    }).promise();
+  } catch(err) {
+    if (err.message.endsWith('does not exist')) {
+      stackExists = false;
+    } else {
+      throw err;
+    }
+  }
+
+  if (!stackExists) {
+    console.log("Ignoring because preview stack does not exist");
+    return;
+  }
+
+  await cloudformation.deleteStack({ StackName: uniqueId }).promise();
+  cloudformation.waitFor("stackDeleteComplete", { StackName: uniqueId });
+
+  // Confirm stack is deleted
+  stackExists = true;
+  try {
+    await cloudformation.describeStacks({
+      StackName: uniqueId
+    }).promise();
+  } catch(err) {
+    if (err.message.endsWith('does not exist')) {
+      stackExists = false;
+    } else {
+      throw err;
+    }
+  }
+
+  if (stackExists) {
+    await octokit.issues.createComment({
+      owner,
+      repo,
+      number: prNumber,
+      body: "Cleaned up preview stack"
+    });
+  } else {
+    await octokit.issues.createComment({
+      owner,
+      repo,
+      number: prNumber,
+      body: `Failed to clean up preview stack ${uniqueId}`
+    });
+  }
 }
 
 /**
@@ -193,10 +247,9 @@ async function cleanupPreviewStack(owner: string, repo: string, prNumber: number
  */
 async function handleNotification(notification: octokitlib.ActivityGetNotificationsResponseItem) {
   // Mark the notification as read
-  /*await octokit.activity.markNotificationThreadAsRead({
+  await octokit.activity.markNotificationThreadAsRead({
     thread_id: parseInt(notification.id, 10)
   });
-  */
 
   // Validate the notification
   if (notification.reason != 'mention') {
@@ -311,7 +364,7 @@ async function retrieveNotifications() {
 
 retrieveNotifications();
 
-// start every 30 seconds
+// poll every 30 seconds
 console.log("Scheduling jobs");
 const job = new CronJob('*/30 * * * * *', retrieveNotifications);
 
