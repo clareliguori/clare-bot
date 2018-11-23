@@ -161,7 +161,7 @@ Resources:
         Location: !Ref 'ArtifactsBucket'
         Name: 'build-output.zip'
         NamespaceType: BUILD_ID
-        Packaging: ZIP
+        Packaging: NONE
         Path: 'codebuild'
         Type: S3
       Description: !Join

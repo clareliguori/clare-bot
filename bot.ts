@@ -14,12 +14,14 @@
  */
 
 const CronJob = require('cron').CronJob;
+const waitUntil = require('async-wait-until');
 import AWS = require('aws-sdk');
 import octokitlib = require('@octokit/rest');
 const octokit = new octokitlib();
 
 const ssm = new AWS.SSM();
 const codebuild = new AWS.CodeBuild();
+const cloudformation = new AWS.CloudFormation();
 
 const githubTokenParameter = process.env.githubTokenParameter || 'clare-bot-github-token';
 let githubToken: string;
@@ -46,19 +48,20 @@ async function provisionPreviewStack(owner: string, repo: string, prNumber: numb
   });
 
   // start a build to build and push the Docker image, plus synthesize the CloudFormation template
+  const uniqueId = `${owner}-${repo}-pr-${prNumber}`;
   const startBuildResponse = await codebuild.startBuild({
     projectName: buildProject,
     sourceVersion: 'pr/' + prNumber,
     sourceLocationOverride: `https://github.com/${owner}/${repo}`,
-    buildspecOverride: 'buildspec-preview.yml',
+    buildspecOverride: 'buildspec.yml',
     environmentVariablesOverride: [
       {
-        name: "IMAGE_REPO",
+        name: "IMAGE_REPO_NAME",
         value: ecrRepository
       },
       {
         name: "IMAGE_TAG",
-        value: `${owner}-${repo}-pr-${prNumber}`
+        value: uniqueId
       }
     ]
   }).promise();
@@ -73,10 +76,104 @@ async function provisionPreviewStack(owner: string, repo: string, prNumber: numb
   });
 
   // wait for build completion
+  await waitUntil(async () => {
+    const response = await codebuild.batchGetBuilds({
+      ids: [buildId]
+    }).promise();
+    return response.builds[0].buildComplete;
+  }, 1000*60*10, 1000*5); // 10 minutes timeout, poll every 5 seconds
+
+  const buildResponse = await codebuild.batchGetBuilds({
+    ids: [buildId]
+  }).promise();
+  const buildResult = buildResponse.builds[0];
+
+  if (buildResult != 'SUCCEEDED') {
+    await octokit.issues.createComment({
+      owner,
+      repo,
+      number: prNumber,
+      body: `Build [${buildId}](${buildUrl}) failed`
+    });
+    return;
+  } else {
+    await octokit.issues.createComment({
+      owner,
+      repo,
+      number: prNumber,
+      body: `Build [${buildId}](${buildUrl}) succeeded. Now provisioning the preview stack ${uniqueId}`
+    });
+  }
 
   // get the template from the build artifact
+  const s3Location = buildResult.artifacts.location + "/template.yml";
+  const s3Url = s3Location.replace('arn:aws:s3:::', 'https://s3.amazonaws.com/');
 
   // create or update CloudFormation stack
+  let stackExists = true;
+  try {
+    await cloudformation.describeStacks({
+      StackName: uniqueId
+    }).promise();
+  } catch(err) {
+    if (err.message.endsWith('does not exist')) {
+      stackExists = false;
+    } else {
+      throw err;
+    }
+  }
+
+  if (stackExists) {
+    await cloudformation.updateStack({
+      StackName: uniqueId,
+      TemplateURL: s3Url,
+      Capabilities: ["CAPABILITY_IAM"]
+    }).promise();
+  } else {
+    await cloudformation.createStack({
+      StackName: uniqueId,
+      TemplateURL: s3Url,
+      Capabilities: ["CAPABILITY_IAM"]
+    }).promise();
+  }
+
+  await waitUntil(async () => {
+    const response = await cloudformation.describeStacks({
+      StackName: uniqueId
+    }).promise();
+    const completedStatusCodes = [
+      "CREATE_FAILED","CREATE_COMPLETE","ROLLBACK_FAILED","ROLLBACK_COMPLETE",
+      "UPDATE_COMPLETE","UPDATE_ROLLBACK_FAILED","UPDATE_ROLLBACK_COMPLETE"
+    ]
+    return completedStatusCodes.includes(response.Stacks[0].StackStatus);
+  }, 1000*60*10, 1000*5); // 10 minutes timeout, poll every 5 seconds
+
+  const stackResponse = await cloudformation.describeStacks({
+    StackName: uniqueId
+  }).promise();
+  const stackStatus = stackResponse.Stacks[0].StackStatus;
+  const stackArn = stackResponse.Stacks[0].StackId;
+  const stackUrl = `https://console.aws.amazon.com/cloudformation/home?region=${region}#/stacks/${stackArn}/overview`;
+
+  if (stackStatus != "CREATE_COMPLETE" && stackStatus != "UPDATE_COMPLETE") {
+    await octokit.issues.createComment({
+      owner,
+      repo,
+      number: prNumber,
+      body: `Preview stack creation [${uniqueId}](${stackUrl}) failed`
+    });
+  } else {
+    let body = `@${requester} preview stack creation [${uniqueId}](${stackUrl}) succeeded!`;
+    for (const output of stackResponse.Stacks[0].Outputs) {
+      body += `\n${output.OutputKey}:${output.OutputValue}`;
+    }
+    await octokit.issues.createComment({
+      owner,
+      repo,
+      number: prNumber,
+      body
+    });
+  }
 }
 
 /**
@@ -211,6 +308,8 @@ async function retrieveNotifications() {
     console.error(err);
   }
 }
+
+retrieveNotifications();
 
 // start every 30 seconds
 console.log("Scheduling jobs");
