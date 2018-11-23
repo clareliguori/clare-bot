@@ -21,13 +21,13 @@ Store the token in AWS Systems Manager Parameter Store:
 
 Provision the stack in CloudFormation:
 ```
-aws cloudformation deploy --region us-west-2 --stack-name clare-bot --template-file template.yml --capabilities CAPABILITY_NAMED_IAM --parameter-overrides Vpc=<default VPC ID>
+aws cloudformation deploy --region us-west-2 --stack-name clare-bot --template-file template.yml --capabilities CAPABILITY_NAMED_IAM --parameter-overrides Vpc=<default VPC ID> Subnets=<default VPC subnets>
 ```
 
 Build and push the Docker image:
 
 ```
-ECR_REPO=`aws ecr create-repository --region us-west-2 --repository-name clare-bot --output text --query 'repository.repositoryUri'`
+ECR_REPO=`aws ecr describe-repositories --region us-west-2 --repository-names clare-bot --output text --query 'repositories[0].repositoryUri'`
 echo $ECR_REPO
 
 $(aws ecr get-login --no-include-email --region us-west-2)

@@ -40,6 +40,8 @@ function timeout(sec: number) {
   return new Promise(resolve => setTimeout(resolve, sec*1000));
 }
 
+let lastModifiedHeader: string;
+
 /**
  * Stand up a preview environment, including building and pushing the Docker image
  */
@@ -112,7 +114,7 @@ async function provisionPreviewStack(owner: string, repo: string, prNumber: numb
     owner,
     repo,
     number: prNumber,
-    body: `Build [${buildId}](${buildUrl}) succeeded. Now provisioning the preview stack ${uniqueId}`
+    body: `Build [${buildId}](${buildUrl}) succeeded. I am now provisioning the preview stack ${uniqueId}`
   });
 
   // get the template from the build artifact
@@ -140,7 +142,7 @@ async function provisionPreviewStack(owner: string, repo: string, prNumber: numb
         TemplateURL: s3Url,
         Capabilities: ["CAPABILITY_IAM"]
       }).promise();
-      cloudformation.waitFor("stackUpdateComplete", { StackName: uniqueId });
+      await cloudformation.waitFor("stackUpdateComplete", { StackName: uniqueId }).promise();
     } catch(err) {
       if (!err.message.endsWith('No updates are to be performed.')) {
         throw err;
@@ -152,7 +154,7 @@ async function provisionPreviewStack(owner: string, repo: string, prNumber: numb
       TemplateURL: s3Url,
       Capabilities: ["CAPABILITY_IAM"]
     }).promise();
-    cloudformation.waitFor("stackCreateComplete", { StackName: uniqueId });
+    await cloudformation.waitFor("stackCreateComplete", { StackName: uniqueId }).promise();
   }
 
   const stackResponse = await cloudformation.describeStacks({
@@ -160,9 +162,10 @@ async function provisionPreviewStack(owner: string, repo: string, prNumber: numb
   }).promise();
   const stackStatus = stackResponse.Stacks[0].StackStatus;
   const stackArn = stackResponse.Stacks[0].StackId;
-  const stackUrl = `https://console.aws.amazon.com/cloudformation/home?region=${region}#/stacks/${encodeURI(stackArn)}/overview`;
+  const stackUrl = `https://console.aws.amazon.com/cloudformation/home?region=${region}#/stacks/${encodeURIComponent(stackArn)}/overview`;
 
   if (stackStatus != "CREATE_COMPLETE" && stackStatus != "UPDATE_COMPLETE") {
+    console.error("Stack status: " + stackStatus);
     await octokit.issues.createComment({
       owner,
       repo,
@@ -208,15 +211,23 @@ async function cleanupPreviewStack(owner: string, repo: string, prNumber: number
     return;
   }
 
+  await octokit.issues.createComment({
+    owner,
+    repo,
+    number: prNumber,
+    body: "Now that this pull request is closed, I will clean up the preview stack"
+  });
+
   await cloudformation.deleteStack({ StackName: uniqueId }).promise();
-  cloudformation.waitFor("stackDeleteComplete", { StackName: uniqueId });
+  await cloudformation.waitFor("stackDeleteComplete", { StackName: uniqueId }).promise();
 
   // Confirm stack is deleted
   stackExists = true;
   try {
-    await cloudformation.describeStacks({
+    const stackResponse = await cloudformation.describeStacks({
       StackName: uniqueId
     }).promise();
+    stackExists = stackResponse.Stacks[0].StackStatus == 'DELETE_COMPLETE';
   } catch(err) {
     if (err.message.endsWith('does not exist')) {
       stackExists = false;
@@ -230,14 +241,15 @@ async function cleanupPreviewStack(owner: string, repo: string, prNumber: number
       owner,
       repo,
       number: prNumber,
-      body: "Cleaned up preview stack"
+      body: "I successfully cleaned up the preview stack"
     });
   } else {
+    console.error("TheStack failed to delete");
     await octokit.issues.createComment({
       owner,
       repo,
       number: prNumber,
-      body: `Failed to clean up preview stack ${uniqueId}`
+      body: `The preview stack ${uniqueId} failed to clean up`
     });
   }
 }
@@ -273,7 +285,6 @@ async function handleNotification(notification: octokitlib.ActivityGetNotificati
     repo,
     number: prNumber
   });
-  console.log(pullRequestResponse);
 
   if (pullRequestResponse.data.state == 'closed') {
     console.log("Cleaning up preview stack");
@@ -297,7 +308,6 @@ async function handleNotification(notification: octokitlib.ActivityGetNotificati
       repo,
       comment_id
     });
-    console.log(commentResponse);
 
     const login = commentResponse.data.user.login;
     if (!whitelistedUsers.includes(login)) {
@@ -338,23 +348,39 @@ async function retrieveNotifications() {
       };
       const paramResult = await ssm.getParameter(params).promise();
       githubToken = paramResult.Parameter.Value;
+      octokit.authenticate({ type: 'token', token: githubToken });
     }
-    octokit.authenticate({ type: 'token', token: githubToken });
 
     // Retrieve latest unread notifications
     const since = new Date();
     since.setHours(since.getHours() - 1); // last hour
-    const response = await octokit.activity.getNotifications({
-      all: false, // unread only
-      since: since.toISOString(),
-      participating: true, // only get @mentions
-    });
-    const notifications = response.data;
 
-    console.log(response.headers);
+    let client = octokit;
+    if (lastModifiedHeader) {
+      client = new octokitlib({
+        headers: {
+          'If-Modified-Since': lastModifiedHeader
+        }
+      });
+    }
+    client.authenticate({ type: 'token', token: githubToken });
+    let response;
+    try {
+      response = await client.activity.getNotifications({
+        all: false, // unread only
+        since: since.toISOString(),
+        participating: true, // only get @mentions
+      });
+    } catch(err) {
+      // TODO Assume this is a 304 Not Modified for now, check explicitly later
+      console.log("No new notifications");
+      return;
+    }
+    const notifications = response.data;
+    lastModifiedHeader = response.headers["last-modified"];
+
     console.log("Notifications: " + notifications.length);
     for (const notification of notifications) {
-      console.log(notification);
       handleNotification(notification);
     }
   } catch(err) {
