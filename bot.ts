@@ -227,7 +227,8 @@ async function cleanupPreviewStack(owner: string, repo: string, prNumber: number
     const stackResponse = await cloudformation.describeStacks({
       StackName: uniqueId
     }).promise();
-    stackExists = stackResponse.Stacks[0].StackStatus == 'DELETE_COMPLETE';
+    console.log("Stack status: " + stackResponse.Stacks[0].StackStatus);
+    stackExists = stackResponse.Stacks[0].StackStatus != 'DELETE_COMPLETE';
   } catch(err) {
     if (err.message.endsWith('does not exist')) {
       stackExists = false;
@@ -236,7 +237,7 @@ async function cleanupPreviewStack(owner: string, repo: string, prNumber: number
     }
   }
 
-  if (stackExists) {
+  if (!stackExists) {
     await octokit.issues.createComment({
       owner,
       repo,
