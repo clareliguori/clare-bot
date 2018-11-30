@@ -2,9 +2,9 @@
 
 ![](https://github.com/clareliguori/clare-bot/raw/master/assets/robot.png)
 
-The clare-bot application polls for GitHub notifications like @clare-bot mentions and performs actions.  For example, whitelisted GitHub users (namely, @clareliguori) can mention @clare-bot with a command "preview this" in a pull request to provision a preview environment.
+The clare-bot application polls for GitHub notifications like @clare-bot mentions and performs actions.  For example, whitelisted GitHub users (namely, @clareliguori) can mention @clare-bot with a command "preview this" in a pull request to provision a preview environment.  See [this pull request](https://github.com/clareliguori/trivia-api/pull/3) for an example interaction, and see [this presentation](https://youtu.be/HCCkVz25UU4) for a demo.
 
-Built with GitHub APIs, AWS Fargate, and Amazon CloudWatch Events
+Built with GitHub APIs, AWS Fargate, AWS CodeBuild, Amazon ECR, and AWS CloudFormation
 
 ### Set up the bot
 
