@@ -30,8 +30,8 @@ aws cloudformation deploy --region us-west-2 \
 --parameter-overrides \
     Vpc=<default VPC ID> \
     Subnets=<default VPC subnets> \
-    BotUser=<github bot username> \
-    WhitelistedUsers=<my github username>
+    BotUser=<bot's GitHub username> \
+    WhitelistedUsers=<your GitHub username>
 ```
 
 Build and push the Docker image:
