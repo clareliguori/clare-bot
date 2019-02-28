@@ -10,6 +10,8 @@ Built with GitHub APIs, AWS Fargate, AWS CodeBuild, Amazon ECR, and AWS CloudFor
 
 Create a GitHub user for your bot, like @clare-bot.  Update the user's [notification settings](https://github.com/settings/notifications) to select all "Web" notifications instead of "Email", and to "Automatically watch repositories".
 
+Invite the bot as a collaborator of your Github Repository
+
 Create a [personal access token](https://github.com/settings/tokens) for the bot user with the following scopes:
 
 * `repo` (Full control of private repositories)
@@ -21,7 +23,11 @@ Store the token in AWS Systems Manager Parameter Store:
 
 Provision the stack in CloudFormation:
 ```
-aws cloudformation deploy --region us-west-2 --stack-name clare-bot --template-file template.yml --capabilities CAPABILITY_NAMED_IAM --parameter-overrides Vpc=<default VPC ID> Subnets=<default VPC subnets>
+aws cloudformation deploy --region us-west-2 \
+--stack-name clare-bot \
+--template-file template.yml \
+--capabilities CAPABILITY_NAMED_IAM \
+--parameter-overrides Vpc=<default VPC ID> Subnets=<default VPC subnets> botUser=<github bot username> whitelistedUsers<my github username>
 ```
 
 Build and push the Docker image:

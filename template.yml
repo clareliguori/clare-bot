@@ -9,6 +9,21 @@ Parameters:
     Type: AWS::SSM::Parameter::Name
     Default: clare-bot-github-token
 
+  botUser:
+    Description: Github Bot User Name
+    Type: String
+    Default: clare-bot
+
+  whitelistedUsers:
+    Description: White listed users splitted per commas
+    Type: String
+    Default: clareliguori
+
+  GitHubTokenParameter:
+    Description: Parameter Store parameter where encrypted GitHub OAuth Token is stored
+    Type: AWS::SSM::Parameter::Name
+    Default: clare-bot-github-token
+
   Vpc:
     Description: ID of the default VPC (or other VPC with public subnets)
     Type: AWS::EC2::VPC::Id
@@ -65,6 +80,10 @@ Resources:
           Environment:
             - Name: githubTokenParameter
               Value: !Ref GitHubTokenParameter
+            - Name: botUser
+              Value: !Ref botUser
+            - Name: whitelistedUsers
+              Value: !Ref whitelistedUsers
       Cpu: '256'
       Memory: '512'
       NetworkMode: awsvpc
