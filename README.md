@@ -27,7 +27,11 @@ aws cloudformation deploy --region us-west-2 \
 --stack-name clare-bot \
 --template-file template.yml \
 --capabilities CAPABILITY_NAMED_IAM \
---parameter-overrides Vpc=<default VPC ID> Subnets=<default VPC subnets> botUser=<github bot username> whitelistedUsers<my github username>
+--parameter-overrides \
+    Vpc=<default VPC ID> \
+    Subnets=<default VPC subnets> \
+    BotUser=<github bot username> \
+    WhitelistedUsers=<my github username>
 ```
 
 Build and push the Docker image:

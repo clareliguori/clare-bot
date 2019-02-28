@@ -9,12 +9,12 @@ Parameters:
     Type: AWS::SSM::Parameter::Name
     Default: clare-bot-github-token
 
-  botUser:
+  BotUser:
     Description: Github Bot User Name
     Type: String
     Default: clare-bot
 
-  whitelistedUsers:
+  WhitelistedUsers:
     Description: White listed users splitted per commas
     Type: String
     Default: clareliguori
@@ -81,9 +81,9 @@ Resources:
             - Name: githubTokenParameter
               Value: !Ref GitHubTokenParameter
             - Name: botUser
-              Value: !Ref botUser
+              Value: !Ref BotUser
             - Name: whitelistedUsers
-              Value: !Ref whitelistedUsers
+              Value: !Ref WhitelistedUsers
       Cpu: '256'
       Memory: '512'
       NetworkMode: awsvpc
