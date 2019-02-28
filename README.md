@@ -6,7 +6,11 @@ The clare-bot application polls for GitHub notifications like @clare-bot mention
 
 Built with GitHub APIs, AWS Fargate, AWS CodeBuild, Amazon ECR, and AWS CloudFormation
 
-### Set up the bot
+### How does clare-bot work?
+
+The clare-bot container constantly polls the [GitHub Notifications APIs](https://developer.github.com/v3/activity/notifications/) for any mentions of the @clare-bot username on GitHub pull requests.  If the mentioner is whitelisted, clare-bot attempts to set up a preview environment in the same AWS account.  The clare-bot provisioning behavior is hard-coded to look for a buildspec.yml file in order to complete a CodeBuild build, and then to look for a template.yml file in the build artifact to use as a CloudFormation template for the preview environment.
+
+### Set up your own bot
 
 Create a GitHub user for your bot, like @clare-bot.  Update the user's [notification settings](https://github.com/settings/notifications) to select all "Web" notifications instead of "Email", and to "Automatically watch repositories".
 
