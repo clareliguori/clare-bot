@@ -2,7 +2,10 @@
     "compilerOptions": {
         "target":"ES2018",
         "module": "commonjs",
+        "sourceMap": true,
         "lib": ["es2016", "es2017.object", "es2017.string"],
+        "outDir": "dist",
+        "moduleResolution": "node",
         "declaration": true,
         "strict": true,
         "noImplicitAny": true,
@@ -13,8 +16,6 @@
         "noUnusedParameters": true,
         "noImplicitReturns": true,
         "noFallthroughCasesInSwitch": false,
-        "inlineSourceMap": true,
-        "inlineSources": true,
         "experimentalDecorators": true,
         "strictPropertyInitialization":false
     }
