@@ -19,11 +19,6 @@ Parameters:
     Type: String
     Default: clareliguori
 
-  GitHubTokenParameter:
-    Description: Parameter Store parameter where encrypted GitHub OAuth Token is stored
-    Type: AWS::SSM::Parameter::Name
-    Default: clare-bot-github-token
-
   Vpc:
     Description: ID of the default VPC (or other VPC with public subnets)
     Type: AWS::EC2::VPC::Id
