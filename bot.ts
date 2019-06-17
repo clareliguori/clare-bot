@@ -19,12 +19,10 @@ import AWS = require('aws-sdk');
 import octokitlib = require('@octokit/rest');
 const octokit = new octokitlib();
 
-const ssm = new AWS.SSM();
 const codebuild = new AWS.CodeBuild();
 const cloudformation = new AWS.CloudFormation();
 
-const githubTokenParameter = process.env.githubTokenParameter || 'clare-bot-github-token';
-let githubToken: string;
+const githubToken = process.env.githubToken;
 
 const botUser = process.env.botUser || 'clare-bot';
 
@@ -341,16 +339,7 @@ async function retrieveNotifications() {
   console.log("Retrieving notifications: " + (new Date()).toISOString());
 
   try {
-    // Retrieve the plaintext github token
-    if (!githubToken) {
-      const params = {
-        Name: githubTokenParameter,
-        WithDecryption: true
-      };
-      const paramResult = await ssm.getParameter(params).promise();
-      githubToken = paramResult.Parameter.Value;
-      octokit.authenticate({ type: 'token', token: githubToken });
-    }
+    octokit.authenticate({ type: 'token', token: githubToken });
 
     // Retrieve latest unread notifications
     const since = new Date();

@@ -59,5 +59,6 @@ docker push $ECR_REPO
 ### Test Locally
 
 ```
-docker run --rm -v $HOME/.aws:/root/.aws:ro -e AWS_REGION=us-west-2 your-bot-name
+GITHUB_TOKEN=`aws ssm get-parameter --name your-bot-name-github-token --with-decryption --query 'Parameter.Value' --output text`
+docker run --rm -v $HOME/.aws:/root/.aws:ro -e AWS_REGION=us-west-2 -e githubToken=$GITHUB_TOKEN your-bot-name
 ```

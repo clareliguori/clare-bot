@@ -73,12 +73,13 @@ Resources:
               awslogs-region: !Ref AWS::Region
               awslogs-stream-prefix: 'bot-logs'
           Environment:
-            - Name: githubTokenParameter
-              Value: !Ref GitHubTokenParameter
             - Name: botUser
               Value: !Ref BotUser
             - Name: whitelistedUsers
               Value: !Ref WhitelistedUsers
+          Secrets:
+            - Name: githubToken
+              ValueFrom: !Ref GitHubTokenParameter
       Cpu: '256'
       Memory: '512'
       NetworkMode: awsvpc
@@ -135,6 +136,7 @@ Resources:
         Version: '2012-10-17'
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+        - arn:aws:iam::aws:policy/AmazonSSMReadOnlyAccess
 
   PreviewStackImageRepository:
     Type: AWS::ECR::Repository
