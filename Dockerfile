@@ -12,6 +12,6 @@ RUN npm prune --production && npm cache clean --force
 FROM node:10.12.0-alpine AS release
 WORKDIR /opt/app
 COPY --from=dependencies /opt/app/node_modules /opt/app/node_modules/
-COPY --from=dependencies /opt/app/bot.js /opt/app/
+COPY --from=dependencies /opt/app/dist/bot.js /opt/app/
 
 CMD [ "node", "bot.js" ]
