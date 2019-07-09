@@ -1,0 +1,20 @@
+version: "3.4"
+services:
+  bot:
+    environment:
+      AWS_CONTAINER_CREDENTIALS_RELATIVE_URI: /creds
+      DB_PASSWORD: local-terrible-password
+    logging:
+      driver: json-file
+    build: .
+
+  db:
+    image: mysql:5.7.4
+    environment:
+      MYSQL_ROOT_PASSWORD: local-terrible-password
+    ports:
+      - 3306:3306
+    labels:
+      ecs-local.task-definition-input.value: local-only
+    networks:
+      - ecs-local-network

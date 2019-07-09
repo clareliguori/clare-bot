@@ -1,0 +1,28 @@
+Override additions:
+
+```
+      DB_PASSWORD: local-terrible-password
+
+    build: .
+
+  db:
+    image: mysql:5.7.4
+    environment:
+      MYSQL_ROOT_PASSWORD: local-terrible-password
+    ports:
+      - 3306:3306
+    labels:
+      ecs-local.task-definition-input.value: local-only
+    networks:
+      - ecs-local-network
+```
+
+Task Definition additions:
+
+```
+                {
+                    "name": "logLevel",
+                    "value": "DEBUG"
+                },
+
+```

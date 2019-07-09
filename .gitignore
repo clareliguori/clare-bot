@@ -1,3 +1,6 @@
+docker-compose.ecs-local.yml
+task-definition.json
+
 .scannerwork
 
 *.js
