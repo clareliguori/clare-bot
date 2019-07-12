@@ -17,12 +17,15 @@
 const CronJob = require('cron').CronJob;
 import AWS = require('aws-sdk');
 import octokitlib = require('@octokit/rest');
-const octokit = new octokitlib();
 
 const codebuild = new AWS.CodeBuild();
 const cloudformation = new AWS.CloudFormation();
 
 const githubToken = process.env.githubToken;
+
+const octokit = new octokitlib({
+  auth: 'token ' + githubToken
+});
 
 const botUser = process.env.botUser || 'clare-bot';
 
@@ -256,9 +259,9 @@ async function cleanupPreviewStack(owner: string, repo: string, prNumber: number
 /**
  * Determine the action associated with this notification
  */
-async function handleNotification(notification: octokitlib.ActivityGetNotificationsResponseItem) {
+async function handleNotification(notification: octokitlib.ActivityListNotificationsResponseItem) {
   // Mark the notification as read
-  await octokit.activity.markNotificationThreadAsRead({
+  await octokit.activity.markThreadAsRead({
     thread_id: parseInt(notification.id, 10)
   });
 
@@ -279,7 +282,7 @@ async function handleNotification(notification: octokitlib.ActivityGetNotificati
   const owner = parts[1];
   const repo = parts[2];
   const prNumber = parseInt(parts[4], 10);
-  const pullRequestResponse = await octokit.pullRequests.get({
+  const pullRequestResponse = await octokit.pulls.get({
     owner,
     repo,
     number: prNumber
@@ -339,8 +342,6 @@ async function retrieveNotifications() {
   console.log("Retrieving notifications: " + (new Date()).toISOString());
 
   try {
-    octokit.authenticate({ type: 'token', token: githubToken });
-
     // Retrieve latest unread notifications
     const since = new Date();
     since.setHours(since.getHours() - 1); // last hour
@@ -348,15 +349,15 @@ async function retrieveNotifications() {
     let client = octokit;
     if (lastModifiedHeader) {
       client = new octokitlib({
+        auth: 'token ' + githubToken,
         headers: {
           'If-Modified-Since': lastModifiedHeader
         }
       });
     }
-    client.authenticate({ type: 'token', token: githubToken });
     let response;
     try {
-      response = await client.activity.getNotifications({
+      response = await client.activity.listNotifications({
         all: false, // unread only
         since: since.toISOString(),
         participating: true, // only get @mentions

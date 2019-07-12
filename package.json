@@ -5,12 +5,12 @@
     "build": "tsc"
   },
   "devDependencies": {
-    "@types/node": "^10.14.4",
-    "typescript": "^3.4.3"
+    "@types/node": "^10.14.12",
+    "typescript": "^3.5.3"
   },
   "dependencies": {
-    "@octokit/rest": "15.17.0",
-    "aws-sdk": "^2.355.0",
-    "cron": "^1.5.0"
+    "@octokit/rest": "^16.28.3",
+    "aws-sdk": "^2.492.0",
+    "cron": "^1.7.1"
   }
 }
