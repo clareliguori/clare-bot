@@ -364,7 +364,7 @@ async function retrieveNotifications() {
     } catch(err) {
       // TODO Assume this is a 304 Not Modified for now, check explicitly later
       console.log("No new notifications");
-      return;
+      return true;
     }
     const notifications = response.data;
     lastModifiedHeader = response.headers["last-modified"];
@@ -375,26 +375,31 @@ async function retrieveNotifications() {
     }
   } catch(err) {
     console.error(err);
+    return false;
   }
+
+  return true;
 }
 
-retrieveNotifications();
+retrieveNotifications().then(function(success) {
+  if (success) {
+    // poll every 30 seconds
+    console.log("Scheduling jobs");
+    const job = new CronJob('*/30 * * * * *', retrieveNotifications);
 
-// poll every 30 seconds
-console.log("Scheduling jobs");
-const job = new CronJob('*/30 * * * * *', retrieveNotifications);
+    process.on('SIGTERM', () => {
+      console.info('SIGTERM signal received.');
+      job.stop();
+    });
+    process.on('SIGHUP', () => {
+      console.info('SIGHUP signal received.');
+      job.stop();
+    });
+    process.on('SIGINT', () => {
+      console.info('SIGINT signal received.');
+      job.stop();
+    });
 
-process.on('SIGTERM', () => {
-  console.info('SIGTERM signal received.');
-  job.stop();
+    job.start();
+  }
 });
-process.on('SIGHUP', () => {
-  console.info('SIGHUP signal received.');
-  job.stop();
-});
-process.on('SIGINT', () => {
-  console.info('SIGINT signal received.');
-  job.stop();
-});
-
-job.start();
