@@ -1,0 +1,8 @@
+version: "2"
+services:
+  bot:
+    build: .
+    environment:
+      botUser: clare-bot
+      githubToken: ${GITHUB_TOKEN}
+      whitelistedUsers: clareliguori
