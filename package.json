@@ -6,7 +6,7 @@
   },
   "devDependencies": {
     "@types/node": "^12.7.3",
-    "typescript": "^3.5.3"
+    "typescript": "^3.6.2"
   },
   "dependencies": {
     "@octokit/rest": "^16.28.7",
