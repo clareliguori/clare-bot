@@ -27,18 +27,27 @@ Store the token in AWS Systems Manager Parameter Store:
 
 ```aws ssm put-parameter --region us-west-2 --name your-bot-name-github-token --type SecureString --value <personal access token>```
 
-Provision the stack in CloudFormation:
+Grab the default VPC ID and default VPC subnets:
+
+```
+VPC_ID=`aws ec2 describe-vpcs --region us-west-2 --filters "Name=isDefault, Values=true" --query 'Vpcs[].VpcId' --output text`
+
+SUBNET_IDS=`aws ec2 describe-subnets --region us-west-2 --filters "Name=vpc-id,Values=$VPC_ID","Name=default-for-az,Values=true" --query 'Subnets[].SubnetId' --output text | tr "\\t" ","`
+```
+
+Provision the stack in CloudFormation with the bot disabled:
 ```
 aws cloudformation deploy --region us-west-2 \
---stack-name your-bot-name \
---template-file template.yml \
---capabilities CAPABILITY_NAMED_IAM \
---parameter-overrides \
-    Vpc=<default VPC ID> \
-    Subnets=<default VPC subnets> \
-    BotUser=<bot's GitHub username> \
-    WhitelistedUsers=<your GitHub username> \
-    GitHubTokenParameter=your-bot-name-github-token
+    --stack-name your-bot-name \
+    --template-file template.yml \
+    --capabilities CAPABILITY_NAMED_IAM \
+    --parameter-overrides \
+        Vpc=$VPC_ID \
+        Subnets=$SUBNET_IDS \
+        BotUser=<bot's GitHub username> \
+        WhitelistedUsers=<your GitHub username> \
+        GitHubTokenParameter=your-bot-name-github-token \
+        BotEnabled=No
 ```
 
 Build and push the Docker image:
@@ -54,6 +63,15 @@ docker build -t your-bot-name .
 docker tag your-bot-name $ECR_REPO
 
 docker push $ECR_REPO
+```
+
+Enable the bot:
+```
+aws cloudformation deploy --region us-west-2 \
+    --stack-name your-bot-name \
+    --template-file template.yml \
+    --capabilities CAPABILITY_NAMED_IAM \
+    --parameter-overrides BotEnabled=Yes
 ```
 
 ### Test Locally

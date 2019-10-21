@@ -27,6 +27,17 @@ Parameters:
     Description: Public subnets for the bot
     Type: List<AWS::EC2::Subnet::Id>
 
+  BotEnabled:
+    Description: Whether the bot should be running
+    Type: String
+    Default: "Yes"
+    AllowedValues:
+      - "Yes"
+      - "No"
+
+Conditions:
+  IsBotEnabled: !Equals [!Ref BotEnabled, "Yes"]
+
 Resources:
   BotImageRepository:
     Type: AWS::ECR::Repository
@@ -42,7 +53,7 @@ Resources:
       DeploymentConfiguration:
         MaximumPercent: 200
         MinimumHealthyPercent: 100
-      DesiredCount: 1
+      DesiredCount: !If [IsBotEnabled, 1, 0]
       NetworkConfiguration:
         AwsvpcConfiguration:
           AssignPublicIp: ENABLED
