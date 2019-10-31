@@ -1,0 +1,46 @@
+on:
+  [push]
+
+name: Deploy
+
+env:
+  AWS_REGION: us-west-2
+  AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+  AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
+jobs:
+  deploy:
+    name: Deploy
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v1.0.0
+
+    - name: Login ECR
+      id: login-ecr
+      uses: clareliguori/deploy-to-amazon-ecs@login-ecr
+
+    - name: Build, tag, and push image
+      env:
+        ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        CONTAINER_IMAGE: clare-bot:${{ github.sha }}
+      run: |
+        # Build and tag the image
+        docker build -t $ECR_REGISTRY/$CONTAINER_IMAGE .
+        # Push image to Amazon ECR
+        docker push $ECR_REGISTRY/$CONTAINER_IMAGE
+
+    - name: Render task definition
+      id: render-task-def
+      uses: clareliguori/deploy-to-amazon-ecs@render-task-def
+      with:
+        task-definition: task-definition-test-action.json
+        container-name: bot
+        image: ${{ steps.login-ecr.outputs.registry }}/clare-bot:${{ github.sha }}
+
+    - name: Deploy task definition
+      uses: clareliguori/deploy-to-amazon-ecs@master
+      with:
+        task-definition: ${{ steps.render-task-def.outputs.task-definition }}
+        service: clare-bot
+        wait-for-service-stability: true
