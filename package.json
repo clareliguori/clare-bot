@@ -9,7 +9,7 @@
     "typescript": "^3.6.3"
   },
   "dependencies": {
-    "@octokit/rest": "^16.30.1",
+    "@octokit/rest": "^16.34.1",
     "aws-sdk": "^2.541.0",
     "cron": "^1.7.2"
   }
