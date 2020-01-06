@@ -1,6 +1,7 @@
 # Install dependencies with npm and compile typescript code
 FROM node:10.12.0-alpine AS dependencies
 WORKDIR /opt/app
+RUN npm config set unsafe-perm true
 RUN npm install -g npm@6.4.1
 COPY package.json package-lock.json ./
 RUN npm ci
