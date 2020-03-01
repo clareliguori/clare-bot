@@ -1,0 +1,21 @@
+pull_request_rules:
+  - name: Automatically merge on CI success and review approval
+    conditions:
+      - base=master
+      - approved-reviews-by=clareliguori
+      - status-success=Travis CI - Pull Request
+      - status-success=Travis CI - Branch
+    actions:
+      merge:
+        method: squash
+        strict: smart
+  - name: Automatically merge Dependabot PRs
+    actions:
+      merge:
+        method: squash
+        strict: false
+    conditions:
+      - base=master
+      - author~=^dependabot(|-preview)\[bot\]$
+      - status-success=Travis CI - Pull Request
+      - status-success=Travis CI - Branch
