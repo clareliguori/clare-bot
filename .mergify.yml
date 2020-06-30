@@ -9,6 +9,7 @@ pull_request_rules:
       merge:
         method: squash
         strict: smart
+        strict_method: merge
 
   - name: Automatically merge Dependabot PRs
     actions:
@@ -17,6 +18,7 @@ pull_request_rules:
       merge:
         method: squash
         strict: smart+fasttrack
+        strict_method: merge
     conditions:
       - base=master
       - author=dependabot[bot]
