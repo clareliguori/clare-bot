@@ -16,8 +16,7 @@ pull_request_rules:
         type: APPROVE
       merge:
         method: squash
-        strict: smart
-        strict_method: rebase
+        strict: smart+fasttrack
     conditions:
       - base=master
       - author=dependabot[bot]
