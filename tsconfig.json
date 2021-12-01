@@ -17,6 +17,7 @@
         "noImplicitReturns": true,
         "noFallthroughCasesInSwitch": false,
         "experimentalDecorators": true,
-        "strictPropertyInitialization":false
+        "strictPropertyInitialization": false,
+        "useUnknownInCatchVariables": false
     }
 }
