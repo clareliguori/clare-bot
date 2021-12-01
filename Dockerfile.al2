@@ -1,9 +1,9 @@
-FROM amazonlinux:2
+FROM public.ecr.aws/amazonlinux/amazonlinux:2
 
 WORKDIR /opt/app
 
 # Install Node.js
-ENV NODE_VERSION 10.17.0
+ENV NODE_VERSION 16.13.1
 RUN yum install -y tar xz
 RUN curl -fsSLO --compressed "https://nodejs.org/dist/v$NODE_VERSION/node-v$NODE_VERSION-linux-x64.tar.xz" \
   && curl -fsSLO --compressed "https://nodejs.org/dist/v$NODE_VERSION/SHASUMS256.txt" \
@@ -16,8 +16,8 @@ RUN curl -fsSLO --compressed "https://nodejs.org/dist/v$NODE_VERSION/node-v$NODE
 COPY package.json package-lock.json ./
 RUN npm ci
 
-COPY index.ts tsconfig.json ./
+COPY bot.ts tsconfig.json ./
 RUN npm run build
 
 # Command to run when container starts
-CMD [ "node", "dist/index.js" ]
+CMD [ "node", "dist/bot.js" ]
