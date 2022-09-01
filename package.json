@@ -10,7 +10,7 @@
   },
   "dependencies": {
     "@octokit/rest": "^16.36.0",
-    "aws-sdk": "^2.1185.0",
+    "aws-sdk": "^2.1207.0",
     "cron": "^2.1.0"
   }
 }
